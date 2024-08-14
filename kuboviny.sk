@@ -1,1 +1,65 @@
-/etc/nginx/sites-available/kuboviny.sk
+server {
+    listen [::]:443 ssl;
+    listen 443 ssl;
+
+    server_name kuboviny.sk www.kuboviny.sk;
+
+    root /var/www/kuboviny.sk/html;
+    index index.html index.htm index.nginx-debian.html;
+
+    # Nastavenia SSL
+    ssl_certificate /etc/ssl/zerossl/combined_certificate.crt;
+    ssl_certificate_key /etc/ssl/zerossl/private.key;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    #ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_ciphers 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256';
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    ssl_session_tickets off;
+
+    # Presmerovanie HTTP na HTTPS
+    if ($scheme = http) {
+        return 301 https://$host$request_uri;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+	}
+    
+    # Location block pre RPC API
+    location /api {
+        proxy_pass http://127.0.0.1:5555;  # Preposiela požiadavky na HTTP backend Gunicornu
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# Blok na HTTP (port 80)
+server {
+    listen 80;
+    listen [::]:80;
+    server_name kuboviny.sk www.kuboviny.sk;
+
+    # Presmerovanie HTTP na HTTPS
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 5055 ssl;
+    server_name kuboviny.sk;
+
+    ssl_certificate /etc/ssl/zerossl/combined_certificate.crt;
+    ssl_certificate_key /etc/ssl/zerossl/private.key;
+
+    location /api {
+        proxy_pass http://127.0.0.1:5555;  # Smeruje na Gunicorn bežiaci na porte 8000
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
